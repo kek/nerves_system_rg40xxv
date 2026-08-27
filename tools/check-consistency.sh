@@ -123,7 +123,7 @@ echo "==> application partition"
 # erlinit mounts it; fwup declares it. A mismatch costs shell history and
 # leaves the app writing to a tmpfs that vanishes on reboot.
 erlinit_mount=$(grep -oE '^-m [^[:space:]]+' rootfs_overlay/etc/erlinit.config | awk '{print $2}')
-want_mount="${APP_DEVPATH}:${APP_TARGET}:${APP_FSTYPE}:nodev:"
+want_mount="${APP_DEVPATH}:${APP_TARGET}:${APP_FSTYPE}:nodev:nodiscard"
 [ "$erlinit_mount" = "$want_mount" ] \
     && ok "erlinit mounts $erlinit_mount" \
     || fail "erlinit mounts '$erlinit_mount' but fwup declares '$want_mount'"

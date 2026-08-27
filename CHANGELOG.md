@@ -31,6 +31,25 @@ zstd unpacks several times faster on the A53s, which is Erlang VM startup
 time. This ships first so flipping that flag app-side cannot produce a card
 U-Boot refuses to boot.
 
+**The app partition's first mount no longer discards — this time for real.**
+The first attempt put `nodiscard` in `-m`'s mount-flags field, which erlinit
+only recognizes a fixed set of names for (`nodev`, `noatime`, `ro`, …);
+anything else, including `nodiscard`, is logged as an unrecognized flag and
+dropped, so that version changed nothing. It belongs in the options field
+instead — `-m /dev/mmcblk0p4:/root:f2fs:nodev:nodiscard` — the same form
+`MayonnaiOS.AppPartition` already uses when it remounts `nodiscard` once
+Elixir is up.
+
+The motive is this card's discard timeout (`mmc_erase: group start error
+-110`), not boot time: measured on hardware, this mount lands in about 150 ms
+with discard on, so the ~3 second window in `docs/display.md`'s boot trace —
+taken on different hardware, and only ever called a plausible link — isn't
+discard's doing here, and the claim that this change would shrink it is
+dropped. What mounting `nodiscard` from the start does buy is closing the
+short window before the app's own remount takes over, in case the timeout
+wedges the filesystem before Elixir starts. `tools/check-consistency.sh`'s
+expected mount string is updated to match.
+
 **The power button reaches Linux, and power off now powers off.** Two separate
 absences, either of which alone left the same symptom.
 
