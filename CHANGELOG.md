@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+**The Buildroot patches apply themselves, including for consumers.**
+`patches/buildroot/` patches Buildroot rather than a package it builds, so
+`BR2_GLOBAL_PATCH_DIR` does not cover it and `mix deps.get` discarded both
+patches with the `nerves_system_br` tree it replaced. Reapplying them was a
+documented manual step, which is one `deps.get` away from a wrong build at all
+times — and an application depending on this system never applied them at all.
+
+`tools/patch-buildroot.sh` now copies them into
+`nerves_system_br/patches/buildroot/`, prefixed `9` so they sort after that
+package's own `0001`–`0016`. `create-build.sh` applies everything in that
+directory when it extracts Buildroot, and `scripts/buildroot-state.sh` hashes it
+to decide when the tree needs re-extracting, so the patches land before
+`defconfig` reads Kconfig and a change to one re-extracts the tree by itself.
+
+Installing rather than patching the extracted tree is the part that matters. On
+a first build there is no tree to patch: Buildroot is downloaded, extracted,
+patched and configured inside the build step, after any mix hook has run. A hook
+that patches the tree therefore works only on the second build.
+
+Two places run it. `mix.exs` calls it from the `loadconfig` alias, which every
+mix task runs, covering this project. A dependency's aliases never run, so
+`Mix.Tasks.Compile.BuildrootPatch` — ordered ahead of `:nerves_package` — covers
+an application building this system, since Mix does run a dependency's
+compilers. `lib` and `tools/patch-buildroot.sh` joined `checksum_files()`
+accordingly, so they ship in the package.
+
+Worth automating because the two patches fail differently. Losing `0002` stops
+the build: the kernel cannot find `firmware/panels/*.panel` and make says so.
+Losing `0001` says nothing at all — panfrost `depends on MESA3D_LLVM`, so Kconfig
+drops it and takes GBM, EGL and GLES with it, and the image boots with no GPU
+driver. A `kmscube` configure failure was the only reason it surfaced.
+
+Reapplying a patch is also not sufficient by itself, which is the part that is
+easy to miss. Buildroot's per-package stamps do not treat `.config` as a
+dependency, so a package configured under the old answers stays stamped as done
+and the stale build silently wins. Same shape as the trap in
+`tools/gen-kernel-defconfig.sh`, where a Kconfig symbol that does not exist yet
+is dropped without comment.
+
+Rebuilding those packages sits behind `--reconfigure-stale`, which the compiler
+passes and the `loadconfig` alias does not — the alias runs on every mix task,
+and `mix format` has no business starting a Mesa rebuild. Without the flag the
+script names the packages and the command instead.
+
 **The kernel stops paying for a 115200-baud UART nobody is watching, and for
 an empty games slot.** Two boot-time costs, about 3 seconds together, both
 measured on the dmesg clock of a running device.
