@@ -13,7 +13,8 @@ path = [
  "mix.lock",
  "VERSION",
  "assets/bootlogo/build.sh",
- "tools/**"
+ "tools/**",
+ "lib/**"
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "None"

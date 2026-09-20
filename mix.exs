@@ -18,7 +18,7 @@ defmodule NervesSystemRG40XXV.MixProject do
       app: @app,
       version: @version,
       elixir: "~> 1.17",
-      compilers: Mix.compilers() ++ [:nerves_package],
+      compilers: Mix.compilers() ++ [:buildroot_patch, :nerves_package],
       nerves_package: nerves_package(),
       description: description(),
       package: package(),
@@ -57,8 +57,44 @@ defmodule NervesSystemRG40XXV.MixProject do
 
   defp bootstrap(args) do
     set_target()
+    ensure_buildroot_patched()
     Application.start(:nerves_bootstrap)
     Mix.Task.run("loadconfig", args)
+  end
+
+  # patches/buildroot/* patch Buildroot itself rather than a package it builds,
+  # so BR2_GLOBAL_PATCH_DIR does not apply to them and `mix deps.get` discards
+  # them along with the nerves_system_br tree it replaces.
+  #
+  # The script installs them into that package's own Buildroot patch directory
+  # rather than patching an extracted tree, because on a first build there is no
+  # tree yet: create-build.sh extracts Buildroot, applies those patches and runs
+  # defconfig, all within the build step. tools/patch-buildroot.sh explains it
+  # in full.
+  #
+  # Hung off `loadconfig`, which every mix task runs, rather than off
+  # `deps.get`. Only one of the two patches fails loudly when it is missing:
+  # losing the mesa3d one drops panfrost from .config and yields an image with
+  # no GPU driver and no build error, so a warning that scrolls past is the same
+  # silent failure one step removed. And `deps.get` is not the only way to lose
+  # them -- `deps.update`, `deps.clean` and rm do too.
+  #
+  # Cheap enough to sit in front of every task: in sync means two small files
+  # compare equal.
+  #
+  # This covers this project only -- a dependency's aliases never run. When an
+  # application builds this system as a dependency, the same script runs from
+  # Mix.Tasks.Compile.BuildrootPatch instead, which is in `compilers` above.
+  defp ensure_buildroot_patched do
+    script = Path.join(__DIR__, "tools/patch-buildroot.sh")
+
+    if File.exists?(script) do
+      case System.cmd(script, [], stderr_to_stdout: true) do
+        {"", 0} -> :ok
+        {out, 0} -> Mix.shell().info(String.trim_trailing(out))
+        {out, _} -> Mix.raise("tools/patch-buildroot.sh failed:\n\n" <> out)
+      end
+    end
   end
 
   def cli do
@@ -171,6 +207,10 @@ defmodule NervesSystemRG40XXV.MixProject do
       "fwup-ops.conf",
       "fwup.conf",
       "LICENSES/*",
+      # Mix.Tasks.Compile.BuildrootPatch, which applies patches/buildroot/ when
+      # this system is built as a dependency. Without it in the package a Hex
+      # consumer builds without those patches.
+      "lib",
       "mix.exs",
       "nerves_defconfig",
       # Without this a change to a kernel patch would not alter the artifact
@@ -178,6 +218,9 @@ defmodule NervesSystemRG40XXV.MixProject do
       "patches",
       "post-build.sh",
       "post-createfs.sh",
+      # The rest of tools/ checks things and cannot alter the image, so it is
+      # deliberately not here. This one applies the Buildroot patches.
+      "tools/patch-buildroot.sh",
       "REUSE.toml",
       "VERSION"
     ]

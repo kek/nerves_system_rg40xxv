@@ -1,17 +1,65 @@
 # Buildroot patches
 
 These patch Buildroot itself, not a package it builds, so they do not go
-through `BR2_GLOBAL_PATCH_DIR`. Apply them by hand to the Buildroot tree that
-`nerves_system_br` downloads:
+through `BR2_GLOBAL_PATCH_DIR`. Nothing needs doing by hand:
+`tools/patch-buildroot.sh` installs them, and both `mix.exs` and
+`Mix.Tasks.Compile.BuildrootPatch` run it.
 
 ```bash
-cd deps/nerves_system_br/buildroot-2026.05.1
-patch -p1 < ../../../patches/buildroot/0001-mesa3d-panfrost-without-target-llvm.patch
+tools/patch-buildroot.sh           # install or refresh
+tools/patch-buildroot.sh --check   # report only; non-zero if out of sync
 ```
 
-`mix deps.get` replaces that tree, so reapply after any dependency refresh.
-There is no hook for this yet; if these become permanent, the right home is a
-step in `tools/`.
+## How they get applied
+
+Not by patching the extracted Buildroot tree. On a first build there is no tree
+to patch: `create-build.sh` downloads Buildroot, extracts it, applies
+`nerves_system_br`'s own patches and runs `defconfig`, all inside the build
+step and all after any mix hook has had its turn. Patching after that is too
+late — Kconfig has already been read, so the symbol 0002 adds is already gone
+from `.config`.
+
+Instead they are **copied into `nerves_system_br/patches/buildroot/`**, which
+`create-build.sh` applies at extraction and `scripts/buildroot-state.sh` hashes
+to decide when the tree needs re-extracting. Ours are prefixed `9` so they sort
+after that package's `0001`–`0016`, which is required: they are written against
+a tree that already has those applied.
+
+So the patches are applied at the right moment, in the right order, and a change
+to one of them re-extracts the tree on its own.
+
+## Where it runs
+
+`mix.exs` calls the script from the `loadconfig` alias, which every mix task
+runs. That covers this project. It does not cover an application that depends on
+this system, because a dependency's aliases never run — hence
+`Mix.Tasks.Compile.BuildrootPatch` in `compilers`, since Mix does run a
+dependency's compilers. It is ordered ahead of `:nerves_package`.
+
+`mix deps.get` still discards the installed patches along with the
+`nerves_system_br` tree. The difference is that the next mix invocation puts
+them back before anything builds.
+
+## Why this is automated rather than documented
+
+The two patches fail differently. Losing 0002 stops the build: the kernel cannot
+find `firmware/panels/*.panel`. Losing 0001 says nothing at all — panfrost
+`depends on BR2_PACKAGE_MESA3D_LLVM`, so Kconfig drops it and takes GBM, EGL and
+GLES with it, and the image boots with no GPU driver.
+
+One more thing Buildroot will not do for itself: its per-package stamps do not
+treat `.config` as a dependency, so a package configured before these patches
+existed stays stamped as done and the stale build silently wins. Reapplying a
+patch is not sufficient on its own.
+
+Rebuilding those packages is behind `--reconfigure-stale`, which
+`Mix.Tasks.Compile.BuildrootPatch` passes and the `loadconfig` alias does not.
+The alias runs on every mix task, and a `mix format` that quietly starts a
+forty-minute Mesa rebuild is not acceptable; a compiler only runs when something
+is being built. Without the flag the script names the packages and the command.
+
+If Buildroot moves under a patch, `apply-patches.sh` fails the build with the
+patch name rather than building something wrong.
 
 ## 0001-mesa3d-panfrost-without-target-llvm
 
