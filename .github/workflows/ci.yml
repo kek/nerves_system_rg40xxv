@@ -319,76 +319,17 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-${{ hashFiles('nerves_defconfig') }}-
 
-      - name: Patch Buildroot and build the system
-        # The patch in the middle is load-bearing, and so is its position.
-        #
-        # patches/buildroot/0001-mesa3d-panfrost-without-target-llvm.patch
-        # patches Buildroot itself, not a package Buildroot builds, so it does
-        # not go through BR2_GLOBAL_PATCH_DIR and nothing applied it here. It
-        # had only ever been applied by hand, locally. Without it, Buildroot
-        # 2026.05.1 has
-        #
-        #     config BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST
-        #             depends on BR2_PACKAGE_MESA3D_LLVM
-        #
-        # and Kconfig then *silently discards* BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST
-        # from nerves_defconfig -- no warning, no error, no non-zero exit --
-        # taking GBM and kmscube with it. patches/buildroot/README.md describes
-        # the symptom as a disk blow-up, and that is what happens in the 63 GB
-        # local Docker VM. It is not what happens here: run 31914168299 had
-        # 103 GB free ("/dev/root 145G 42G 103G 29% /"), so instead of dying it
-        # built a swrast-only Mesa, uploaded a 346 MB artifact and reported
-        # success. Every green run since cc1da1e shipped an image with no
-        # panfrost, no GBM and no kmscube.
-        #
-        # Why prime the tree before patching: `mix deps.get` does not create a
-        # Buildroot tree at all. deps/nerves_system_br/create-build.sh does,
-        # and create_buildroot_dir() begins with `rm -fr "$NERVES_SYSTEM"/buildroot*`
-        # before re-extracting. So patching before that runs has nothing to
-        # patch, and patching a tree left over from anything else gets deleted
-        # by the build it was meant to fix. Running create-build.sh ourselves
-        # first extracts the tree and writes buildroot-2026.05.1/.nerves-br-state;
-        # the invocation inside `mix compile` compares that against a freshly
-        # generated expectation (Buildroot version plus sha256 of
-        # nerves_system_br's own patches -- not ours), finds them equal, and
-        # leaves the tree, and our patch, alone.
-        #
-        # patch(1) is the "the patch was applied" assertion -- it exits
-        # non-zero when a hunk rejects, so no separate check is needed for
-        # that. Two flag choices are deliberate:
-        #
-        #   --force        never prompt. A freshly extracted tree cannot be
-        #                  already-patched, so if patch thinks it is, something
-        #                  is wrong. Left to prompt, patch reads the answer
-        #                  from a non-terminal and can silently *reverse* the
-        #                  patch and still exit 0 -- verified with Apple patch
-        #                  2.0-12u11: "Assume -R? [y]" defaults to yes.
-        #   no -N/--forward  those make an already-applied tree a skip. Here it
-        #                  is an anomaly and should be red.
-        #
-        # The reverse dry-run in front only exists to tell the two failure
-        # modes apart: "already applied" versus "upstream context moved".
+      - name: Build the system
+        # `mix compile` installs patches/buildroot/ into nerves_system_br before
+        # Buildroot is extracted (tools/patch-buildroot.sh), so there is nothing
+        # to do here beyond building. The patch that matters most is the mesa3d
+        # one: without it Kconfig silently drops
+        # BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST and the build still
+        # succeeds, with a Mesa that has no GBM and no kmscube. The next step
+        # asserts against the built image rather than trusting the .config,
+        # which is what catches that.
         run: |
-          br=deps/nerves_system_br/buildroot
-
           mix deps.get
-          deps/nerves_system_br/create-build.sh nerves_defconfig "$RUNNER_TEMP/br-prime"
-
-          # Every patch in the directory, in filename order, rather than one
-          # named patch. There are two now and the second was added a month
-          # after the first; a loop cannot be forgotten the way a second
-          # hardcoded variable can.
-          for p in patches/buildroot/*.patch; do
-            echo "==> $p"
-            if patch -p1 --dry-run --reverse --force -d "$br" < "$p" >/dev/null 2>&1; then
-              echo "The freshly extracted Buildroot tree already contains this patch."
-              echo "That should be impossible -- create-build.sh re-extracts it."
-              exit 1
-            fi
-            patch -p1 --force --no-backup-if-mismatch -d "$br" < "$p"
-          done
-
-          rm -rf "$RUNNER_TEMP/br-prime"
           mix compile
 
       # Assert against the image, not the configuration. The verification plan

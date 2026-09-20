@@ -175,9 +175,10 @@ BR2_PACKAGE_FREETYPE=y
 # and libretro cores expect the same.
 #
 # REQUIRES patches/buildroot/0001-mesa3d-panfrost-without-target-llvm applied
-# to the Buildroot tree. `mix deps.get` replaces that tree, so reapply it after
-# any dependency refresh or this will try to build LLVM for the target and run
-# the build environment out of disk.
+# to the Buildroot tree, which `mix compile` does itself (see
+# patches/buildroot/README.md). Without it Kconfig silently drops the panfrost
+# line below, or, if it did keep it, this would build LLVM for the target and
+# run the build environment out of disk.
 #
 # Buildroot 2026.05.1 has the panfrost driver `depends on
 # BR2_PACKAGE_MESA3D_LLVM` and force-selecting NEEDS_PRECOMP_COMPILER, which
