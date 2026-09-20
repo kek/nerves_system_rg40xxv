@@ -18,7 +18,7 @@ defmodule NervesSystemRG40XXV.MixProject do
       app: @app,
       version: @version,
       elixir: "~> 1.17",
-      compilers: Mix.compilers() ++ [:nerves_package],
+      compilers: Mix.compilers() ++ [:rg40xxv_buildroot_patches, :nerves_package],
       nerves_package: nerves_package(),
       description: description(),
       package: package(),
@@ -214,5 +214,122 @@ defmodule NervesSystemRG40XXV.MixProject do
     else
       System.put_env("MIX_TARGET", "target")
     end
+  end
+end
+
+# Makes Buildroot carry patches/buildroot/*.patch, so that `mix compile` is the
+# whole build instructions.
+#
+# These patch Buildroot itself rather than a package it builds, so
+# BR2_GLOBAL_PATCH_DIR cannot reach them, and nerves_system_br has no hook for a
+# system's own. It does apply everything in its own patches/buildroot/ when
+# create-build.sh extracts the tree, and it hashes that directory into
+# .nerves-br-state, so a patch placed there is applied on a fresh extraction and
+# a changed one forces a clean re-extraction. Copying ours in is therefore the
+# whole mechanism, and it needs no cooperation from the build runner because
+# the copy happens before the runner starts.
+#
+# The prefix keeps the names from colliding with nerves_system_br's own 0001..,
+# and sorts after them, which matters: these were written against a tree that
+# already carries those.
+#
+# Skipping this does not fail loudly. Kconfig discards
+# BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_PANFROST from nerves_defconfig when the
+# mesa3d patch is missing, and the build goes on to make a Mesa with no GBM.
+defmodule Mix.Tasks.Compile.Rg40xxvBuildrootPatches do
+  @moduledoc false
+  use Mix.Task.Compiler
+
+  @prefix "rg40xxv-"
+
+  @impl Mix.Task.Compiler
+  def run(_args) do
+    project_dir = Path.dirname(Mix.Project.project_file())
+    app = Mix.Project.config()[:app]
+
+    destination =
+      Mix.Project.deps_paths()
+      |> Map.fetch!(:nerves_system_br)
+      |> Path.join("patches/buildroot")
+
+    fingerprint =
+      sync_patches(Path.join(project_dir, "patches/buildroot"), destination)
+
+    discard_stale_build(
+      fingerprint,
+      Path.join(project_dir, ".nerves/buildroot-patches.sha256"),
+      Path.wildcard(Path.join(project_dir, ".nerves/artifacts/#{app}-*")),
+      Path.wildcard(Path.join(Nerves.Artifact.base_dir(), "#{app}-*"))
+    )
+
+    {:noop, []}
+  end
+
+  @doc false
+  # Returns a fingerprint of the patch set.
+  def sync_patches(source, destination) do
+    patches =
+      source
+      |> Path.join("*.patch")
+      |> Path.wildcard()
+      |> Enum.sort()
+      |> Enum.map(&{@prefix <> Path.basename(&1), File.read!(&1)})
+
+    File.mkdir_p!(destination)
+
+    wanted = Enum.map(patches, &elem(&1, 0))
+
+    # A patch removed or renamed here must not linger in the copy, or it would
+    # keep being applied.
+    destination
+    |> Path.join(@prefix <> "*.patch")
+    |> Path.wildcard()
+    |> Enum.reject(&(Path.basename(&1) in wanted))
+    |> Enum.each(&File.rm!/1)
+
+    for {name, content} <- patches do
+      path = Path.join(destination, name)
+      if File.read(path) != {:ok, content}, do: File.write!(path, content)
+    end
+
+    :crypto.hash(:sha256, :erlang.term_to_binary(patches)) |> Base.encode16(case: :lower)
+  end
+
+  @doc false
+  # Buildroot does not rebuild a package because .config changed. A build
+  # directory made under a different patch set can therefore hold packages
+  # configured for options that no longer exist -- a Mesa with no GBM, in the
+  # case that motivated this -- and a green build of it ships that. The
+  # directory is output, reproducible from source, so it is discarded rather
+  # than trusted.
+  #
+  # Only a *recorded* different patch set counts. With no stamp there is
+  # nothing to compare against, and treating "unknown" as "stale" would throw
+  # away a working build for nothing.
+  def discard_stale_build(fingerprint, stamp, build_dirs, links) do
+    case File.read(stamp) do
+      {:ok, ^fingerprint} ->
+        :ok
+
+      {:ok, _other} when build_dirs != [] ->
+        Mix.shell().info(
+          "The Buildroot patches changed since the last build; discarding the old " <>
+            "build directory, because Buildroot would not redo the packages it affects."
+        )
+
+        Enum.each(build_dirs, &File.rm_rf!/1)
+        # A link left dangling would look like a finished build.
+        links |> Enum.filter(&dangling?/1) |> Enum.each(&File.rm!/1)
+
+      _ ->
+        :ok
+    end
+
+    File.mkdir_p!(Path.dirname(stamp))
+    File.write!(stamp, fingerprint)
+  end
+
+  defp dangling?(path) do
+    match?({:ok, %File.Stat{type: :symlink}}, File.lstat(path)) and not File.exists?(path)
   end
 end

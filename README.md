@@ -186,7 +186,8 @@ soldering iron.
   soft power-off, without which shutdown falls through to PSCI and the board
   reboots instead); five are the H616 display stack. See [the display
   notes](docs/display.md).
-- **Two Buildroot patches** in `patches/buildroot/`, described in
+- **Two Buildroot patches** in `patches/buildroot/`, applied automatically by
+  `mix compile` and described in
   [`patches/buildroot/README.md`](patches/buildroot/README.md).
 - **`nerves_ssh` cannot generate host keys on OTP 29** (ssh 6.0.3): the daemon
   dies with `{:error, "No host key available"}` and then crashes in
@@ -210,6 +211,16 @@ cd nerves_system_rg40xxv
 mix deps.get
 mix compile          # builds via Docker on macOS, natively on Linux
 ```
+
+That is the whole procedure. `mix compile` also applies the two
+[Buildroot patches](patches/buildroot/README.md) the system needs; there is
+nothing to apply by hand.
+
+A native Linux build uses Buildroot's [host
+tools](https://buildroot.org/downloads/manual/manual.html#requirement-mandatory).
+The two a fresh machine most often lacks are `wget` and `bc` (on Arch:
+`pacman -S wget bc`). A missing tool stops the build within seconds of
+starting and names itself, so a gap costs a minute, not an hour.
 
 > [!WARNING]
 > **`mix compile` after a DTS edit ships the *previous* DTB**, with a fresh

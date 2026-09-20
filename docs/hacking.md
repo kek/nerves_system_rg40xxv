@@ -151,8 +151,9 @@ version.
 `patches/linux/` carries eight patches and `patches/buildroot/` carries two;
 each has a header explaining its upstream status, and
 [`patches/buildroot/README.md`](../patches/buildroot/README.md) explains the
-Buildroot ones in full. None are upstream as of 6.18, so all need re-checking
-on a kernel bump.
+Buildroot ones in full, including how `mix compile` applies them and why
+editing one discards the existing Buildroot build. None are upstream as of
+6.18, so all need re-checking on a kernel bump.
 
 ## Notes on the boot chain
 

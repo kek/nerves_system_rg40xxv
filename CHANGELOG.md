@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+**`mix compile` now applies the Buildroot patches itself.** The two patches in
+`patches/buildroot/` change Buildroot, not a package it builds, and had to be
+applied to the downloaded tree by hand. Nothing did it, and the failure is not
+loud: without the mesa3d patch Kconfig silently drops the panfrost option from
+`nerves_defconfig` and the build goes on to make a Mesa with no GBM; without the
+firmware patch the kernel stops at a missing
+`firmware/panels/anbernic,rg40xx-v2-panel.panel`. A compiler in `mix.exs` now
+copies them into `nerves_system_br`'s own patch directory, where
+`create-build.sh` applies them at extraction, and discards an existing Buildroot
+build made under a different patch set, since Buildroot would not redo the
+packages it affects. CI drops its hand-rolled priming step. The README lists the
+host tools a native build needs (`wget` and `bc` are the usual gaps). Verified
+by a clean `mix compile` through `create-build.sh` on Linux; the Docker runner
+on macOS is not tested.
+
 **The kernel stops paying for a 115200-baud UART nobody is watching, and for
 an empty games slot.** Two boot-time costs, about 3 seconds together, both
 measured on the dmesg clock of a running device.

@@ -1,17 +1,28 @@
 # Buildroot patches
 
 These patch Buildroot itself, not a package it builds, so they do not go
-through `BR2_GLOBAL_PATCH_DIR`. Apply them by hand to the Buildroot tree that
-`nerves_system_br` downloads:
+through `BR2_GLOBAL_PATCH_DIR`. **Nothing needs doing by hand:** `mix compile`
+applies them.
 
-```bash
-cd deps/nerves_system_br/buildroot-2026.05.1
-patch -p1 < ../../../patches/buildroot/0001-mesa3d-panfrost-without-target-llvm.patch
-```
+`mix.exs` has a compiler, ahead of `:nerves_package`, that copies every
+`*.patch` here into `deps/nerves_system_br/patches/buildroot/` as
+`rg40xxv-<name>`. `create-build.sh` applies that whole directory when it
+extracts Buildroot and hashes it into its state file, so a new or edited patch
+makes it re-extract a clean tree. The copy is made on every compile, so
+`mix deps.get` replacing the dependency costs nothing.
 
-`mix deps.get` replaces that tree, so reapply after any dependency refresh.
-There is no hook for this yet; if these become permanent, the right home is a
-step in `tools/`.
+The prefix keeps the names clear of `nerves_system_br`'s own `0001`–`0006` and
+sorts after them, which matters because these were written against a tree that
+already carries those. Adding a patch is just adding a file here.
+
+Buildroot does not rebuild a package because `.config` changed, so a build
+directory made under a *different* patch set can hold packages configured for
+options that no longer exist. The compiler records a fingerprint of the patch
+set in `.nerves/buildroot-patches.sha256` and, when it changes, discards the
+old Buildroot output instead of building on it. That is a full rebuild by
+design: the alternative is a green build with a Mesa that has no GBM. The check
+covers the local runner's `.nerves/artifacts/`; a Docker build volume is not
+inspected.
 
 ## 0001-mesa3d-panfrost-without-target-llvm
 
