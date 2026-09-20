@@ -140,10 +140,10 @@ defmodule NervesSystemRG40XXV.MixProject do
 
   defp docs do
     [
-      # The notes and specs are extras so that links to them from the README
-      # resolve. ExDoc checks such links against the generated doc set rather
-      # than the filesystem, so a markdown link to a file that is not listed
-      # here is reported as missing even when it exists.
+      # The notes are extras so that links to them from the README resolve.
+      # ExDoc checks such links against the generated doc set rather than the
+      # filesystem, so a markdown link to a file that is not listed here is
+      # reported as missing even when it exists.
       extras: [
         "README.md",
         "CHANGELOG.md",
@@ -153,10 +153,17 @@ defmodule NervesSystemRG40XXV.MixProject do
         "docs/debugging.md",
         "docs/hacking.md",
         "docs/bluetooth-notes.md",
-        "docs/dram-verification.md"
+        "docs/dram-verification.md",
+        "docs/de33-register-map.md",
+        # :filename is required rather than cosmetic. The page id comes from
+        # the basename, so a second README.md collides with the root one and
+        # ExDoc disambiguates it to readme-1 -- a page named after nothing.
+        {"patches/buildroot/README.md", filename: "buildroot-patches"}
       ],
       groups_for_extras: [
-        Notes: ~r"docs/[^/]+\.md"
+        # Matched against the path exactly as written above, so the Buildroot
+        # README has to be named: the regex only reaches docs/.
+        Notes: [~r"docs/[^/]+\.md", "patches/buildroot/README.md"]
       ],
       main: "readme",
       source_ref: "v#{@version}",
