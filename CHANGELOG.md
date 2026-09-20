@@ -85,12 +85,14 @@ defconfig and not a property of this board. The wider question — that this
 board is LPDDR3 and not the LPDDR4 its sibling's defconfig declares — is
 settled four ways in [DRAM verification](docs/dram-verification.md).
 
-**Eight kernel patches** are now carried in `patches/linux/`, the new one being
-the AXP717 power-off above.
+**Nine kernel patches** are now carried in `patches/linux/`, the new ones being
+the AXP717 power-off and the mmc prescan skip above.
 
-`docs/superpowers/` was deleted, its one remaining document having moved out to
-the project journal, and `docs/**` is now globbed as CC-BY-4.0 rather than
-named document by document.
+`docs/superpowers/` was deleted and `docs/**` is now globbed as CC-BY-4.0
+rather than named document by document. Its one surviving document is now
+[the DE33 register map](docs/de33-register-map.md): Allwinner's undocumented
+display top block, decoded from the vendor BSP and kept as reference even
+though every lead in it is closed.
 
 ## v0.2.0
 

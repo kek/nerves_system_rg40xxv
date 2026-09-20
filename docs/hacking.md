@@ -148,7 +148,7 @@ version.
 
 ## Patches
 
-`patches/linux/` carries eight patches and `patches/buildroot/` carries two;
+`patches/linux/` carries nine patches and `patches/buildroot/` carries two;
 each has a header explaining its upstream status, and
 [`patches/buildroot/README.md`](../patches/buildroot/README.md) explains the
 Buildroot ones in full. None are upstream as of 6.18, so all need re-checking

@@ -41,8 +41,8 @@
 # reported as a success, 346 MB artifact uploaded -- contains no "panfrost",
 # no "llvm", no host-mesa3d and no kmscube anywhere in its log.
 #
-# The lesson recorded in the project journal for 2026-08-16
-# is that .config said the build was correct while the image was not, so the
+# The lesson is that .config said the build was correct while the image was
+# not, so the
 # checks below are ordered accordingly: the Kconfig grep is only a secondary
 # line, kept so that a Kconfig deselect (nothing was ever asked for) reports
 # differently from a build or staleness failure (asked for, never shipped).

@@ -45,26 +45,26 @@ Together those two bracket the failure: environment untouched means U-Boot
 never ran; environment updated but partition still `0xff` means the kernel
 never started; both changed means the failure is in userland.
 
-# Verifying it on a device
+## Verifying it on a device
 
 This procedure has been run on a physical RG40XXV. It is still worth following
 on a new unit or after changing the system, because most of it is unexercised
 by CI.
 
-## 1. Bake in WiFi and SSH before flashing
+### 1. Bake in WiFi and SSH before flashing
 
 See "Getting in" in the README. There is no console to fall back on if you
 forget, and `mix firmware && mix burn` destroys the stock Anbernic OS on that
 card — image your original first, or use a spare. The stock card is also your
 control experiment if the device shows no signs of life.
 
-## 2. Power on
+### 2. Power on
 
 The panel now shows the kernel log, so a boot that reaches Linux says so on
 its own screen. If it does not, use FEL rather than guessing; do not read
 anything into the LED.
 
-## 3. Get in
+### 3. Get in
 
 ```bash
 ssh nerves.local
@@ -81,7 +81,7 @@ Confirm it explicitly anyway:
 cmd "cat /proc/device-tree/model"     # => Anbernic RG40XX V
 ```
 
-## 4. Check the buttons, and then the stick — the least certain thing here
+### 4. Check the buttons, and then the stick — the least certain thing here
 
 The button GPIO mapping was inherited from mainline's `rg35xx-plus.dts` on the
 premise that the RG40XXV is the same board family, and it has since been
@@ -136,7 +136,7 @@ polarity, and the extremes give the real range in place of the nominal
 `0..4096` the device tree assumes. The `adc-joystick` comment in
 `linux/sun50i-h700-anbernic-rg40xx-v.dts` has the full account.
 
-## 5. Everything else
+### 5. Everything else
 
 ```elixir
 # which drivers actually bound
@@ -163,7 +163,7 @@ cmd "fw_printenv nerves_fw_active"
 For a screen that is present but wrong, see [the display
 notes](display.md#reading-a-screen-that-is-wrong).
 
-## 6. If it never gets far enough to SSH
+### 6. If it never gets far enough to SSH
 
 Use FEL and the card breadcrumbs above. Every bug found during bring-up was
 diagnosed that way; opening the case for UART was never necessary.
@@ -173,15 +173,17 @@ logic, on internal test pads. Two changes make it more useful, and both need
 a system rebuild, so make them before your first build if you expect to need
 them:
 
-- Drop `quiet` and add `earlycon` to the `append` line in
-  `rootfs_overlay/boot/extlinux/extlinux-a.conf` for early kernel output.
-  Bare `earlycon` resolves because the device tree sets
+- Add `ignore_loglevel earlycon` to the `append` line in
+  `rootfs_overlay/boot/extlinux/extlinux-a.conf` for early kernel output. The
+  line ships `loglevel=5`, which keeps info-level messages off the consoles to
+  save about 1.5 s of synchronous UART writes, so `ignore_loglevel` is what
+  brings them back. Bare `earlycon` resolves because the device tree sets
   `chosen/stdout-path = "serial0:115200n8"`.
 - Set `CONFIG_BOOTDELAY=1` in `uboot/uboot.defconfig` so you can interrupt
   U-Boot. It is 0 here for fast boot, which is the wrong trade-off while
   bringing a board up.
 
-## What to report back
+### What to report back
 
 If something fails, the useful details are: which stage above it reached, the
 full `dmesg`, and `cat /proc/device-tree/model`. Those three narrow it down to

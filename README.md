@@ -179,13 +179,14 @@ soldering iron.
 
 - **No HDMI.** The SoC nodes are upstream but nothing here describes the
   connector.
-- **Eight kernel patches are carried** in `patches/linux/`, none of them
-  upstream as of 6.18, so all need checking on a kernel bump. Three are fixes
+- **Nine kernel patches are carried** in `patches/linux/`, none of them
+  upstream as of 6.18, so all need checking on a kernel bump. Four are fixes
   found here (`pwrseq_simple` GPIO reset, without which there is no WiFi; a
-  sun4i USB phy fix, without which the gadget never enumerates; and an AXP717
+  sun4i USB phy fix, without which the gadget never enumerates; an AXP717
   soft power-off, without which shutdown falls through to PSCI and the board
-  reboots instead); five are the H616 display stack. See [the display
-  notes](docs/display.md).
+  reboots instead; and an mmc prescan skip, without which an empty card slot
+  costs a second and a half of boot); five are the H616 display stack. See
+  [the display notes](docs/display.md).
 - **Two Buildroot patches** in `patches/buildroot/`, described in
   [`patches/buildroot/README.md`](patches/buildroot/README.md).
 - **`nerves_ssh` cannot generate host keys on OTP 29** (ssh 6.0.3): the daemon
@@ -236,6 +237,7 @@ failure it describes produced no error message anywhere.
 | [Hacking on the system](docs/hacking.md) | Kernel config regeneration, the DTB rebuild trap, the boot chain |
 | [DRAM verification](docs/dram-verification.md) | Why this board is LPDDR3, established four ways, and the one open question about the DRAM rail |
 | [Bluetooth](docs/bluetooth-notes.md) | The RTL8821CS config blob linux-firmware does not ship, and why `hci0` stayed behind looking healthy without it |
+| [The DE33 register map](docs/de33-register-map.md) | Allwinner's undocumented display top block, decoded from the vendor BSP — reference for the next display bug |
 
 ## Licensing and provenance
 

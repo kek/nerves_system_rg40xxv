@@ -90,7 +90,7 @@ type-C role switch has no device tree binding, and that was taken as the likely
 cause. It was a plausible reading of a real comment, and it was wrong. The
 missing binding was not the problem; two drivers contending for one phy was.
 
-# How this was verified
+## How this was verified
 
 On-device boot **is** confirmed. What follows is the build-time verification
 reached *before* any hardware was available. It is kept because CI still

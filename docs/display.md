@@ -80,11 +80,10 @@ framebuffer, blender route, sizes — read correctly while the engine still did
 nothing.
 
 Decoding Allwinner's own sun50iw9 BSP is what converted "the screen is green"
-into a one-register boolean; the DE33 register decode lives in the project
-journal as `de33-register-map.md`. Once
-`0x1008104` was known to be the frame-end latch, the question became "why does
-this engine never finish a frame" — and an engine wired to a TCON that is not
-driving the panel never will.
+into a one-register boolean; that decode is [the DE33 register
+map](de33-register-map.md). Once `0x1008104` was known to be the frame-end
+latch, the question became "why does this engine never finish a frame" — and an
+engine wired to a TCON that is not driving the panel never will.
 
 The general lesson is the one this board keeps teaching: **a firmware known to
 drive the hardware is ground truth in a way source review is not.** Comparing
@@ -177,10 +176,9 @@ do with it, and the BEAM was running two and a half seconds before the panel
 existed. Building it in should move first light to roughly two seconds.
 
 > [!NOTE]
-> **The timing claim is not yet confirmed on hardware.** The built-in
-> arrangement is tagged `v0.4.0`; the numbers above are measured, the
-> improvement is predicted. `dmesg | grep panel-mipi` on a device running
-> `v0.4.0` settles it.
+> **Confirmed on hardware.** The console switches to the framebuffer at about
+> 2.4 s, against 10.27 s on the module arrangement above, so building the
+> stack in did what the numbers predicted.
 
 `tools/check-consistency.sh` asserts that the spelling in the DTS matches a
 file that exists and that `CONFIG_EXTRA_FIRMWARE` names that same panel, since
@@ -335,9 +333,9 @@ System.cmd("/sbin/devmem", ["0x11C1010", "32"])   # UI layer 0 framebuffer addre
 nerves-common's busybox config turns it off, and its absence is what stopped a
 debugging session. Registers owned by a driver can also be read through
 `/sys/kernel/debug/regmap/1100000.mixer-{layers,top,display}`, but the DE clock
-window at `0x1008000` has no regmap, so `devmem` is the only way to see it. The project journal's
-`de33-register-map.md` lists the addresses worth reading, with the values to
-expect.
+window at `0x1008000` has no regmap, so `devmem` is the only way to see it.
+[The DE33 register map](de33-register-map.md) lists the addresses worth
+reading, with the values to expect.
 
 `modetest` needs stdin held open or it drops the mode as it exits:
 

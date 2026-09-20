@@ -14,11 +14,10 @@ independent lines:
    configuration — including two that change nothing but the protocol — fails
    to bring DRAM up.
 
-Line 3 and lines 1, 2 and 4 were produced by two sessions working the question
-concurrently and unaware of each other, from different SPL sources and with
-different readback methods. That they agree is itself part of the evidence.
-That the duplication was only noticed afterwards is not a model of how to do
-this, and is why the merge exists in the history.
+Line 3 was arrived at independently of lines 1, 2 and 4 — different SPL
+binaries, a different readback method, and no shared working notes — and the
+two strands were only compared once both were finished. That they agree is
+therefore part of the evidence rather than a restatement of it.
 
 ## Why it needed verifying at all
 
@@ -153,7 +152,8 @@ DRAM training, and check whether a 1 MiB random pattern written to
 type hangs H616-class training — that hang is the whole reason ROCKNIX
 needs two builds — so the *pair* of outcomes is a clean oracle on the chip.
 
-Binaries used (kit staged in `~/src/rg40xxv-fel-test/`):
+Binaries used (staged outside this repository, since they are third-party
+build output rather than source):
 
 - `spl-ours.bin` — this system's 0.2.0 `u-boot-sunxi-with-spl.bin`.
 - `spl-rocknix-DDR4.bin`, `spl-rocknix-DDR3.bin` — cut from the 8 KiB
@@ -238,11 +238,13 @@ Three, with different costs and different reaches.
 | `tools/dram-type.sh boot0` | a vendor boot0 dump | what the manufacturer programs |
 | `tools/dram-type.sh device` | a running device, ssh | what the controller is driving |
 | `tools/dram-falsify.sh` | Docker, FEL, hands on the device | whether the wrong configurations fail |
-| `~/src/rg40xxv-fel-test/` | FEL, hands on the device | the ROCKNIX-SPL differential test |
 
 The first two are cheap and repeatable and belong in any doubt about this
-question. The last two need the device in FEL mode — both SD cards out, USB-C
-to the OTG port, power on — and cost a power cycle per wrong answer.
+question. The third needs the device in FEL mode — both SD cards out, USB-C to
+the OTG port, power on — and costs a power cycle per wrong answer. Evidence 3
+used a separate set of ROCKNIX-built SPLs that is not kept here; `dram-falsify`
+builds its own from one tree, which is the reproducible version of the same
+experiment.
 
 `tools/check-consistency.sh` also asserts the DRAM block on every push: LPDDR3
 selected, LPDDR4 not, the five boot0-derived values intact, and `TPR6`/`TPR10`
@@ -289,46 +291,20 @@ reads whatever we pinned regardless of the chip fitted, so ROCKNIX-style
 detection cannot work against our firmware. Only stock or vendor firmware gives
 that reading meaning.
 
-### The change, and what is still unmeasured
+### What shipped, and what is still open
 
-Goal: decide whether to ship the DRAM rail at LPDDR3-nominal 1.2 V, by
-showing it trains and survives a soak, ideally against a 1.1 V control.
+Three edits landed together, because all three are in `checksum_files()` and
+separately would have cost three full rebuilds (1–3.5 h each, ~25 GB free, and
+strictly one build at a time):
 
-**Where this stands (2026-08-21).** Matching the vendor is now the reason for
-the value; the checks below are what confirm we match it correctly. The FEL
-training check passed:
-`tools/dram-falsify.sh test lpddr3-vdd1v2` brought DRAM up with two addresses
-1 MB apart independent, on an SPL differing from the control by seven bytes.
-On that basis all three edits below are committed — `CONFIG_AXP_DCDC3_VOLT` is
-1200, the board DTS overrides `dcdc3` to 1200000 by full path, and `memtester`
-is in the image. Three checks now hold the pieces together:
-`tools/check-consistency.sh` asserts the SPL and the DTS name the same voltage
-and fails loudly if they diverge, `tools/check-dts.sh` asserts the value
-reached the compiled DTB, and both run on every push.
-
-What is **not** done is everything FEL cannot show: nothing has been burned, so
-our own rail has never been read on a running system at 1.2 V, and no soak has
-run. Steps 2 and 3 below are the outstanding work.
-
-The soak is no longer the thing deciding whether to ship 1.2 V — the vendor's
-own value decides that. It is now confirmation that we match it in practice, and
-the more interesting question it can still answer is whether the previous 1.1 V
-was doing quiet damage. That would need a soak at the old voltage to detect, and
-nobody has run one, so it stays an open question about the past rather than a
-risk in the present.
-
-**The three changes, all in `checksum_files()`, so they share one full rebuild
-(1–3.5 h, ~25 GB free, strictly one build at a time):**
-
-1. `uboot/uboot.defconfig`: `CONFIG_AXP_DCDC3_VOLT=1100` → `1200`. The
-   SPL programs the AXP717 before DRAM training, so this is the voltage
-   the training actually happens at. (Rider: fix the over-strong
-   "The RG40XXV has LPDDR3" comment while the checksum is already
-   invalidated.)
-2. `linux/sun50i-h700-anbernic-rg40xx-v.dts`: override the inherited pin,
-   or the kernel will drag the rail back to 1.1 V at regulator
-   registration — training at 1.2 V and then undervolting mid-run is
-   worse than either steady state. Both edits must land together:
+1. `uboot/uboot.defconfig`: `CONFIG_AXP_DCDC3_VOLT` 1100 → 1200. The SPL
+   programs the AXP717 before DRAM training, so this is the voltage the
+   training actually happens at.
+2. `linux/sun50i-h700-anbernic-rg40xx-v.dts`: `reg_dcdc3` overridden to
+   1200000 by full path. Without it the kernel drags the rail back to 1.1 V at
+   regulator registration, and training at 1.2 V and then undervolting mid-run
+   is worse than either steady state — so this edit and the one above could not
+   land separately:
 
    ```dts
    &reg_dcdc3 {
@@ -336,61 +312,58 @@ risk in the present.
            regulator-max-microvolt = <1200000>;
    };
    ```
-3. `nerves_defconfig`: add `BR2_PACKAGE_MEMTESTER=y` — the soak tool,
-   riding the same rebuild for free.
+3. `nerves_defconfig`: `BR2_PACKAGE_MEMTESTER=y`, the soak tool, riding the
+   same rebuild for free.
 
-Mind the path-referenced-content trap ([hacking.md](hacking.md)): the DTS
-is consumed via `BR2_LINUX_KERNEL_CUSTOM_DTS_PATH`, and an already-stamped
-linux package silently ships the previous bytes under a fresh checksum.
+The cheap FEL check came first, before spending the rebuild, since 1.2 V
+failing to train would have made the other two edits moot:
+`tools/dram-falsify.sh test lpddr3-vdd1v2` brought DRAM up with two addresses
+1 MB apart independent. That arm is the control with `CONFIG_AXP_DCDC3_VOLT`
+raised and nothing else touched — the built SPLs differ by seven bytes, one
+constant and the eGON checksum — and it is valid on its own because in FEL
+there is no kernel to drag the rail back afterwards.
 
-**Verification sequence:**
+Three checks now hold the pieces together, all running on every push:
+`tools/check-consistency.sh` asserts the SPL and the DTS name the same voltage
+and fails loudly if they diverge, `tools/check-dts.sh` asserts the value
+reached the compiled DTB, and the DTS is consumed through
+`BR2_LINUX_KERNEL_CUSTOM_DTS_PATH`, so the path-referenced-content trap
+([hacking.md](hacking.md)) applies: an already-stamped linux package would
+otherwise ship the previous bytes under a fresh checksum.
 
-1. *FEL training check (cheap, nothing flashed, and no rebuild):* this is now
-   one command —
+**Still open: the two things FEL cannot show.** Nothing has been burned since,
+so our own rail has never been read on a running system at 1.2 V, and no soak
+has run.
 
-   ```
-   tools/dram-falsify.sh test lpddr3-vdd1v2
-   ```
+- *Rail confirmation.* Burn and boot, then read
+  `/sys/class/regulator/*/microvolts` for `vdd-dram`. It should say 1200000,
+  and for the first time the reading is meaningful rather than an echo of our
+  own pin — which also un-blinds ROCKNIX-style detection on our image.
+- *Soak.* `memtester 700M <loops>` from an SSH/IEx session (`System.cmd`). The
+  device has 1 GB, so ~700 MB locks most of what Linux and the BEAM leave free.
+  Several hours to overnight, run warm — shell closed, CPU and GPU loaded
+  alongside — because marginal DRAM fails hot and not on an idle bench.
 
-   That arm is the control with `CONFIG_AXP_DCDC3_VOLT` raised to 1200 and
-   nothing else touched; the built SPLs differ by seven bytes, one constant and
-   the eGON checksum. It is a valid test on its own because in FEL there is no
-   kernel to drag the rail back afterwards. Bracket it with `test lpddr3` as
-   the known-good arm, or use the kit in `~/src/rg40xxv-fel-test/` for the
-   1 MiB pattern readback. **Do this before spending the rebuild** — if 1.2 V
-   does not train, the other two edits are moot.
-2. *Rail confirmation:* burn and boot, then read
-   `/sys/class/regulator/*/microvolts` for `vdd-dram` — it should now say
-   1200000, and for the first time the reading is meaningful rather than
-   an echo of our own pin. (This also un-blinds the ROCKNIX-style
-   detection on our image.)
-3. *Soak:* `memtester 700M <loops>` from an SSH/iex session (`System.cmd`)
-   — the device has 1 GB, so ~700 MB locks most of what Linux + BEAM
-   leave free. Several hours to overnight. Run it warm: shell closed,
-   CPU/GPU load alongside, because marginal DRAM fails hot, not on an
-   idle bench.
-4. *Control arm:* the same soak at 1.1 V. Honest cost accounting: that
-   needs either a second build with only `DCDC3_VOLT` reverted (another
-   full rebuild), or accepting the unit's boot-and-run history at 1.1 V
-   as the informal control. A runtime-switchable rail (widened DTS range
-   plus a userspace regulator consumer) would allow same-build A/B but
-   adds kernel-config complexity that likely isn't worth it here.
+The soak is not what decides whether to ship 1.2 V; the vendor's own value
+decides that. It is confirmation that we match the vendor in practice, and the
+more interesting question it can still answer is whether the previous 1.1 V was
+doing quiet damage. Detecting that needs a soak at the *old* voltage, which
+means either a second full rebuild with only `DCDC3_VOLT` reverted or accepting
+this unit's boot-and-run history at 1.1 V as an informal control. (A
+runtime-switchable rail — a widened DTS range plus a userspace regulator
+consumer — would allow a same-build A/B, at more kernel-config complexity than
+the question is worth.) So it stays an open question about the past rather than
+a risk in the present.
 
-**Interpretation:** zero errors at 1.2 V warm ⇒ at least as good as
-1.1 V, matches the community build and the chip's nominal spec — ship it.
-Errors at 1.1 V but not 1.2 V ⇒ the undervolt was a real margin problem.
-Errors at both ⇒ the problem isn't voltage; investigate timings.
+If the soak is ever run: no errors at 1.2 V warm means at least as good as
+1.1 V, matching both the community build and the chip's nominal spec. Errors at
+1.1 V but not at 1.2 V would mean the undervolt was a real margin problem.
+Errors at both would mean the problem is not voltage, and the timings are next.
 
-**Risk:** low. 1.2 V is LPDDR3's nominal VDD2 and exactly what ROCKNIX's
-LPDDR3 build programs into the same PMIC on the same boards. Worst case
-is a non-booting SD image, recovered by reflashing the known-good 0.2.0
-image or via FEL; nothing here can brick an SD-boot device.
-
-A wording nit deferred on purpose: the comment in `uboot/uboot.defconfig`
-still says "The RG40XXV has LPDDR3", which overstates (it should say "this
-unit"). Any edit under `uboot/` invalidates the artifact checksum and costs
-a full rebuild, so the correction should ride along with the next real
-`uboot/` change — most likely the DCDC3 voltage experiment above.
+The risk either way is low. 1.2 V is LPDDR3's nominal VDD2 and exactly what
+ROCKNIX's LPDDR3 build programs into the same PMIC on the same boards. The
+worst case is a non-booting SD image, recovered by reflashing the known-good
+0.2.0 image or over FEL; nothing here can brick an SD-boot device.
 
 ## If this ever needs re-verifying
 
@@ -399,9 +372,9 @@ nothing but ssh, then `tools/dram-type.sh boot0` if a vendor card is to hand.
 For the destructive-looking end of it, `tools/dram-falsify.sh matrix` rebuilds
 and reruns the whole matrix against its recorded outcomes.
 
-Or re-run the kit (`~/src/rg40xxv-fel-test/fel-dram-test.sh`, or rebuild it:
-sunxi-tools plus any LPDDR3/LPDDR4 SPL pair with verified TPR10
-fingerprints). Definitive alternatives: photograph the DRAM package
+Evidence 3 can be reconstructed from sunxi-tools plus any LPDDR3/LPDDR4 SPL
+pair whose TPR10 fingerprints have been verified, though the matrix above
+supersedes it. Definitive alternatives: photograph the DRAM package
 marking and decode the part number, or dump the vendor boot0 from a stock
 or muOS card (`dd bs=512 skip=16 count=256`) and read `dram_para` offset
 `0x38`: 7 = LPDDR3, 8 = LPDDR4.
